@@ -6,15 +6,15 @@ int cuve_pleine = 160;    // hauteur en cm quand la cuve est pleine
 int capteur = 170;        // hauteur en cm du capteur
 int trig = 9;             // PIN9 branché sur le TRIP du module (vert)
 int echo = 8;             // PIN8 branché sur l'ECHO du module (bleu)
-int lcd = 2;              // PIN2 branché sur RX LCD (jaune)
+int lcd_rx = 2;           // PIN2 branché sur RX LCD (jaune)
+int lcd_tx = 3;           // PIN3 branché sur TX LCD (non utilisée)
 long echo_lu;             // le temps aller/retour de l'impulsion en us
-int cm;                   // la hauteur
-int pourcent;
+long cm;                  // la hauteur
 char string[3];           // string array pour le LCD
 
 // Attach the serial display's RX line to digital pin
 // See https://www.sparkfun.com/tutorials/246
-SoftwareSerial mySerial(3,lcd); // pin 2 = TX, pin 3 = RX (unused)
+SoftwareSerial lcd(lcd_tx,lcd_rx);
 
 void setup()
 {
@@ -22,8 +22,8 @@ void setup()
   digitalWrite(trig, LOW);
   pinMode(echo, INPUT);
   Serial.begin(9600);     // Pour debug, log console
-  mySerial.begin(9600);   // LCD
-  delay(500);             // wait for display to boot up
+  lcd.begin(9600);        // LCD
+  delay(1000);            // wait for display to boot up
 }
 
 void loop()
@@ -40,28 +40,25 @@ void loop()
   Serial.print(cm);
   Serial.println(" cm");
   
-  mySerial.write(254); // move cursor to beginning of first line
-  mySerial.write(128);
+  // Déplace le curseur au debut de la premiere ligne
+  lcd.write(254);
+  lcd.write(128);
 
-  mySerial.write("                "); // clear display
-  mySerial.write("                ");
+  // Efface l'écran
+  lcd.write("                ");
+  lcd.write("                ");
 
-  mySerial.write(254); // move cursor to beginning of first line
-  mySerial.write(128);
- 
-  mySerial.write("Hauteur cuve :");
-  
-  mySerial.write(254); // move cursor to beginning of second line
-  mySerial.write(192);
-  
-  sprintf(string,"%3u",cm);
-  mySerial.write(string);
-  mySerial.write(" cm, ");
-  
-  pourcent = cm * 100 / cuve_pleine;
-  sprintf(string,"%3u",pourcent);
-  mySerial.write(string);
-  mySerial.write(" %");
-  
+  // Déplace le curseur au debut de la premiere ligne
+  lcd.write(254);
+  lcd.write(128);
+
+  // Affiche les valeurs
+  lcd.print("Hauteur cuve :  ");
+  lcd.print(cm);
+  lcd.print(" cm / ");
+  lcd.print(cm * 100 / cuve_pleine);
+  lcd.print(" %");
+
+  // Attend une seconde avant prochain check
   delay(1000);
 }
