@@ -2,9 +2,9 @@
 #include <SoftwareSerial.h>
 
 // Les variables
-float cuve_pleine = 128;  // hauteur en cm quand la cuve est pleine
+float cuve_pleine = 125;  // hauteur en cm quand la cuve est pleine
 float volume_pleine = cuve_pleine * 110 * 258 ; // volume cuve pleine
-int capteur = 149;        // hauteur en cm du capteur
+int capteur = 151;        // hauteur en cm du capteur
 int trig = 8;             // TRIG
 int echo = 9;             // ECHO
 int lcd_rx = 2;           // PIN2 branché sur RX LCD (jaune)
