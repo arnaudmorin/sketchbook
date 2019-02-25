@@ -15,7 +15,11 @@ int capteur_bas = 3;
 int in1 = 11;
 int in2 = 12;
 int photo = A0;
-int jour = 30; // il fait jour si superieur a ca - avec 10 d'hysteresis
+int jour = 70; // il fait jour si superieur a ca
+int hyst = 20; // avec cet d'hysteresis
+int c_nuit = 0 ; // Nombre de fois quil fait nuit, reset a 0 a chaque fois quil fait jour
+int c_nuit_max = 450; // Nombre de fois quil doit faire nuit pour fermer la porte, comme l'arduino se met en veille environ 8s avant de refaire une boucle, 450*8s = 3600s = 1H
+                      // Le systeme attend done une heure apres la nuit avant de fermer, ca permet a coco de rentrer tranquilement.
 bool debug = true;
 
 /*
@@ -141,14 +145,26 @@ void loop()
   }
   
   // Si il fait jour, on ouvre la porte
-  if (photo_read > jour + 10) {
-    if (debug) Serial.println("Ouverture porte");
+  if (photo_read > jour + hyst) {
+    if (debug) Serial.println("Il fait jour");
+    c_nuit = 0;
     ouvrir_porte();
   }
   // Sinon on ferme
-  else if (photo_read < jour - 10) {
-    if (debug) Serial.println("Fermeture porte");
-    fermer_porte();
+  else if (photo_read < jour) {
+    if (debug){
+      Serial.println("Il fait nuit");
+      Serial.print("c_nuit = ");
+      Serial.print(c_nuit);
+    }
+    if (c_nuit > c_nuit_max) {
+      if (debug) Serial.println("c_nuit > c_nuit_max, fermeture porte");
+      fermer_porte();
+    }
+    else {
+      if (debug) Serial.println("c_nuit < c_nuit_max, attente");
+      c_nuit++;
+    }
   }
 
   // ATmega328 goes to sleep for about 8 seconds
