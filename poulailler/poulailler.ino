@@ -6,6 +6,7 @@
  * Librairies
  */
 #include <avr/sleep.h>
+#include <avr/wdt.h>
 
 /*
  * Definition des PIN et variables globales
@@ -15,7 +16,7 @@ int capteur_bas = 3;
 int in1 = 11;
 int in2 = 12;
 int photo = A0;
-int jour = 70; // il fait jour si superieur a ca
+int jour = 10; // il fait jour si superieur a ca
 int hyst = 20; // avec cet d'hysteresis
 int c_nuit = 0 ; // Nombre de fois quil fait nuit, reset a 0 a chaque fois quil fait jour
 int c_nuit_max = 450; // Nombre de fois quil doit faire nuit pour fermer la porte, comme l'arduino se met en veille environ 8s avant de refaire une boucle, 450*8s = 3600s = 1H
@@ -65,48 +66,85 @@ void ouvrir_porte()
  */
 void goToSleep()   
 {
-// The ATmega328 has five different sleep states.
-// See the ATmega 328 datasheet for more information.
-// SLEEP_MODE_IDLE -the least power savings 
-// SLEEP_MODE_ADC
-// SLEEP_MODE_PWR_SAVE
-// SLEEP_MODE_STANDBY
-// SLEEP_MODE_PWR_DOWN -the most power savings
-// I am using the deepest sleep mode from which a
-// watchdog timer interrupt can wake the ATMega328
+  // The ATmega328 has five different sleep states.
+  // See the ATmega 328 datasheet for more information.
+  // SLEEP_MODE_IDLE -the least power savings 
+  // SLEEP_MODE_ADC
+  // SLEEP_MODE_PWR_SAVE
+  // SLEEP_MODE_STANDBY
+  // SLEEP_MODE_PWR_DOWN -the most power savings
+  // I am using the deepest sleep mode from which a
+  // watchdog timer interrupt can wake the ATMega328
+  set_sleep_mode(SLEEP_MODE_PWR_DOWN);  // Set sleep mode.
+  sleep_enable();                       // Enable sleep mode.
+  sleep_mode();                         // Enter sleep mode.
 
-set_sleep_mode(SLEEP_MODE_PWR_DOWN); // Set sleep mode.
-sleep_enable(); // Enable sleep mode.
-sleep_mode(); // Enter sleep mode.
-// After waking from watchdog interrupt the code continues
-// to execute from this point.
-sleep_disable(); // Disable sleep mode after waking.
+  // After waking from watchdog interrupt the code continues
+  // to execute from this point.
+  sleep_disable();                      // Disable sleep mode after waking.
+
+  // Reset the watchdog
+  wdt_reset();
 }
 
 /*
  * Fonction pour activer le watchdog
  */
 void watchdogOn() {
-  
-// Clear the reset flag, the WDRF bit (bit 3) of MCUSR.
-MCUSR = MCUSR & B11110111;
-  
-// Set the WDCE bit (bit 4) and the WDE bit (bit 3) 
-// of WDTCSR. The WDCE bit must be set in order to 
-// change WDE or the watchdog prescalers. Setting the 
-// WDCE bit will allow updtaes to the prescalers and 
-// WDE for 4 clock cycles then it will be reset by 
-// hardware.
-WDTCSR = WDTCSR | B00011000; 
+  /* 
+   WDTCSR (Watch Dog Timer register) contains a byte (8 bits)
+      7 WDIF -- Interrupt Flag / automatically flagged high and low by the system.
+      6 WDIE -- Interrupt Enable
+      5 WDP3 -- See timeout table
+      4 WDCE -- Configuration Enable, set this to 1 to enter setup mode (and change values of the register). It works only for 4 cycles
+      3 WDE  -- Enable the watchdog
+      2 WDP2 -- See timeout table
+      1 WDP1 -- See timeout table
+      0 WDP0 -- See timeout table
 
-// Set the watchdog timeout prescaler value to 1024 K
-// which will yeild a time-out interval of about 8.0 s.
-WDTCSR = B00100001;
+      WDP WDP WDP WDP TimeOut
+       3   2   1   0   (ms)  
+       0   0   0   0   16  
+       0   0   0   1   32  
+       0   0   1   0   64  
+       0   0   1   1   125  
+       0   1   0   0   250  
+       0   1   0   1   500  
+       0   1   1   0   1000  
+       0   1   1   1   2000  
+       1   0   0   0   4000  
+       1   0   0   1   8000
+  */
 
-// Enable the watchdog timer interupt.
-WDTCSR = WDTCSR | B01000000;
-MCUSR = MCUSR & B11110111;
+  // Disable all interrupts so that configuration is never disrupted and left unfinished
+  cli();
 
+  // Reset the watchdog before configuring it
+  // As this is usually not necessary, and it may contain a bug (see https://forum.arduino.cc/index.php?topic=483731.0)
+  wdt_reset();
+
+  // Clear the reset flag, the WDRF bit (bit 3) of MCUSR.
+  // To clear WDE, WDRF must be cleared first. 
+  MCUSR &= ~(1<<WDRF);
+  //MCUSR = MCUSR & B11110111;
+
+  // Enter "Setup" mode, by setting WDCE and WDE to 1
+  WDTCSR |= (1<<WDCE) | (1<<WDE);
+  //WDTCSR = WDTCSR | B00011000; 
+
+  // Set the watchdog timeout prescaler value to 1024 K
+  // which will yeild a time-out interval of about 8.0 s.
+  WDTCSR = B01100001;
+
+  // Enable back the interrupts
+  sei();
+}
+
+/*
+ * Function called when waking up from watchdog
+ */
+ISR(WDT_vect) {
+  // Do nothing
 }
 
 /*
@@ -155,7 +193,7 @@ void loop()
     if (debug){
       Serial.println("Il fait nuit");
       Serial.print("c_nuit = ");
-      Serial.print(c_nuit);
+      Serial.println(c_nuit);
     }
     if (c_nuit > c_nuit_max) {
       if (debug) Serial.println("c_nuit > c_nuit_max, fermeture porte");
@@ -168,6 +206,8 @@ void loop()
   }
 
   // ATmega328 goes to sleep for about 8 seconds
+  if (debug) Serial.println("Dodo");
   if (debug) Serial.flush();
+  wdt_reset();
   goToSleep();
 }
