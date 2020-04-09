@@ -18,12 +18,12 @@ const int PIN_capteur_bas = 3;
 const int PIN_in1 = 7;
 const int PIN_in2 = 8;
 const int PIN_photo = A0;
-int jour = 50; // il fait jour si superieur a ca
-int hyst = 20; // avec cet d'hysteresis
+volatile int jour = 50; // il fait jour si superieur a ca
+volatile int hyst = 20; // avec cet d'hysteresis
 int compteur_nuit = 0 ; // Nombre de fois quil fait nuit, reset a 0 a chaque fois quil fait jour
-int compteur_nuit_max = 450; // Nombre de fois quil doit faire nuit pour fermer la porte, comme l'arduino se met en veille environ 8s avant de refaire une boucle, 450*8s = 3600s = 1H
+volatile int compteur_nuit_max = 450; // Nombre de fois quil doit faire nuit pour fermer la porte, comme l'arduino se met en veille environ 8s avant de refaire une boucle, 450*8s = 3600s = 1H
                            // Le systeme attend done une heure apres la nuit avant de fermer, ca permet a coco de rentrer tranquilement.
-int mode = 1; // 1 = auto, 2 = fermer, 3 = ouvrir
+volatile int mode = 1; // 1 = auto, 2 = fermer, 3 = ouvrir
 
 /* Params radio avec NRF24L01
 Radio    Arduino
@@ -40,6 +40,7 @@ const static uint8_t RADIO_ID = 1;             // Our radio's id.
 const static uint8_t DESTINATION_RADIO_ID = 0; // Id of the radio we will transmit to.
 const static uint8_t PIN_RADIO_CE = 9;
 const static uint8_t PIN_RADIO_CSN = 10;
+const static uint8_t RADIO_CHANNEL = 1;
 
 /*
  * Paquet sortant, emis par le poulailler
@@ -49,9 +50,13 @@ const static uint8_t PIN_RADIO_CSN = 10;
 struct PaquetSortant
 {
   int compteur_nuit;
+  int compteur_nuit_max;
   int capteur_photo;
   int capteur_haut;
   int capteur_bas;
+  int jour;
+  int hyst;
+  int mode;
 };
 
 /*
@@ -64,6 +69,7 @@ struct PaquetEntrant
   int mode;
   int jour;
   int compteur_nuit_max;
+  int hyst;
 };
 
 NRFLite _radio;
@@ -206,7 +212,7 @@ void setup()
   pinMode(PIN_photo, INPUT);
   digitalWrite(PIN_in1, LOW);
   digitalWrite(PIN_in2, LOW);
-  _radio.init(RADIO_ID, PIN_RADIO_CE, PIN_RADIO_CSN, NRFLite::BITRATE250KBPS, 108);
+  _radio.init(RADIO_ID, PIN_RADIO_CE, PIN_RADIO_CSN, NRFLite::BITRATE250KBPS, RADIO_CHANNEL);
   
   Serial.begin(9600);
 }
@@ -222,21 +228,6 @@ void loop()
   int capteur_haut = digitalRead(PIN_capteur_haut);
   int capteur_bas = digitalRead(PIN_capteur_bas);
 
-  // Ecriture du paquetSortant
-  PaquetSortant paquetSortant;
-  paquetSortant.capteur_photo = capteur_photo;
-  paquetSortant.capteur_haut = capteur_haut;
-  paquetSortant.capteur_bas = capteur_bas;
-  paquetSortant.compteur_nuit = compteur_nuit;
-
-  // Envoi du paquetSortant
-  if (_radio.send(DESTINATION_RADIO_ID, &paquetSortant, sizeof(paquetSortant))){ // Note how '&' must be placed in front of the variable name.
-    Serial.println("Sending Radio Success");
-  }
-  else {
-    Serial.println("Sending Radio Failed");
-  }
-
   // Reception paquetEntrant
   while (_radio.hasData()) {
     PaquetEntrant paquetEntrant;
@@ -245,15 +236,18 @@ void loop()
     String msg = "Config received:";
     msg += " mode=";
     msg += paquetEntrant.mode;
-    msg += " compteur_nuit_max";
+    msg += " compteur_nuit_max=";
     msg += paquetEntrant.compteur_nuit_max;
-    msg += " jour";
+    msg += " jour=";
     msg += paquetEntrant.jour;
+    msg += " hyst=";
+    msg += paquetEntrant.hyst;
     Serial.println(msg);
 
     compteur_nuit_max = paquetEntrant.compteur_nuit_max;
     jour = paquetEntrant.jour;
     mode = paquetEntrant.mode;
+    hyst = paquetEntrant.hyst;
   }
 
   String msg = "Capteurs: ";
@@ -312,6 +306,23 @@ void loop()
     Serial.println("Mode: ouverture");
     ouvrir_porte();
   }
+
+  // Ecriture du paquetSortant
+  PaquetSortant paquetSortant;
+  paquetSortant.capteur_photo = capteur_photo;
+  paquetSortant.capteur_haut = capteur_haut;
+  paquetSortant.capteur_bas = capteur_bas;
+  paquetSortant.compteur_nuit = compteur_nuit;
+  paquetSortant.compteur_nuit_max = compteur_nuit_max;
+  paquetSortant.jour = jour;
+  paquetSortant.hyst = hyst;
+  paquetSortant.mode = mode;
+
+  // Envoi du paquetSortant, sans verifier si bien recu ou pas
+  _radio.send(DESTINATION_RADIO_ID, &paquetSortant, sizeof(paquetSortant), NRFLite::NO_ACK);
+
+  // Remet la radio en mode RX
+  _radio.hasData();
 
   // ATmega328 goes to sleep for about 8 seconds
   Serial.println("Fin: je vais dormir pendant 8 secondes");
