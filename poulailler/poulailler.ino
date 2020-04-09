@@ -40,7 +40,6 @@ const static uint8_t RADIO_ID = 1;             // Our radio's id.
 const static uint8_t DESTINATION_RADIO_ID = 0; // Id of the radio we will transmit to.
 const static uint8_t PIN_RADIO_CE = 9;
 const static uint8_t PIN_RADIO_CSN = 10;
-const static uint8_t RADIO_CHANNEL = 1;
 
 /*
  * Paquet sortant, emis par le poulailler
@@ -79,6 +78,7 @@ NRFLite _radio;
  */
 void fermer_porte()
 {
+  Serial.println("Action: fermeture porte");
   // Timeout de 45sec pour descendre
   long timeout = millis() + 45000;
 
@@ -98,10 +98,11 @@ void fermer_porte()
  */
 void ouvrir_porte()
 {
-  // Timeout de 45sec pour descendre
+  Serial.println("Action: ouverture porte");
+  // Timeout de 45sec pour monter
   long timeout = millis() + 45000;
 
-  // Tant qu'on a pas atteind le capteur bas
+  // Tant qu'on a pas atteind le capteur haut
   while ((millis() < timeout) && (digitalRead(PIN_capteur_haut) == true)) {
     // On monte
     digitalWrite(PIN_in1, LOW);
@@ -203,6 +204,8 @@ ISR(WDT_vect) {
  */
 void setup()
 {
+  Serial.begin(115200);
+  
   // Turn on watchdog
   watchdogOn();
 
@@ -212,9 +215,7 @@ void setup()
   pinMode(PIN_photo, INPUT);
   digitalWrite(PIN_in1, LOW);
   digitalWrite(PIN_in2, LOW);
-  _radio.init(RADIO_ID, PIN_RADIO_CE, PIN_RADIO_CSN, NRFLite::BITRATE250KBPS, RADIO_CHANNEL);
-  
-  Serial.begin(9600);
+  _radio.init(RADIO_ID, PIN_RADIO_CE, PIN_RADIO_CSN);
 }
 
 /*
@@ -228,8 +229,26 @@ void loop()
   int capteur_haut = digitalRead(PIN_capteur_haut);
   int capteur_bas = digitalRead(PIN_capteur_bas);
 
+  Serial.println("");
+
+  // Ecriture du paquetSortant
+  PaquetSortant paquetSortant;
+  paquetSortant.capteur_photo = capteur_photo;
+  paquetSortant.capteur_haut = capteur_haut;
+  paquetSortant.capteur_bas = capteur_bas;
+  paquetSortant.compteur_nuit = compteur_nuit;
+  paquetSortant.compteur_nuit_max = compteur_nuit_max;
+  paquetSortant.jour = jour;
+  paquetSortant.hyst = hyst;
+  paquetSortant.mode = mode;
+
+  // Envoi du paquetSortant
+  Serial.println("Action: envoi radio");
+  _radio.send(DESTINATION_RADIO_ID, &paquetSortant, sizeof(paquetSortant));//, NRFLite::NO_ACK);
+
   // Reception paquetEntrant
-  while (_radio.hasData()) {
+  Serial.println("Action: lecture radio");
+  while (_radio.hasAckData()) {
     PaquetEntrant paquetEntrant;
     _radio.readData(&paquetEntrant);
 
@@ -280,14 +299,12 @@ void loop()
     if (capteur_photo > jour + hyst) {
       Serial.println("Info: il fait jour");
       compteur_nuit = 0;
-      Serial.println("Action: ouverture porte");
       ouvrir_porte();
     }
     // Sinon on ferme
     else if (capteur_photo < jour) {
       Serial.println("Info: il fait nuit");
       if (compteur_nuit > compteur_nuit_max) {
-        Serial.println("Action: fermeture porte");
         fermer_porte();
       }
       else {
@@ -306,23 +323,6 @@ void loop()
     Serial.println("Mode: ouverture");
     ouvrir_porte();
   }
-
-  // Ecriture du paquetSortant
-  PaquetSortant paquetSortant;
-  paquetSortant.capteur_photo = capteur_photo;
-  paquetSortant.capteur_haut = capteur_haut;
-  paquetSortant.capteur_bas = capteur_bas;
-  paquetSortant.compteur_nuit = compteur_nuit;
-  paquetSortant.compteur_nuit_max = compteur_nuit_max;
-  paquetSortant.jour = jour;
-  paquetSortant.hyst = hyst;
-  paquetSortant.mode = mode;
-
-  // Envoi du paquetSortant, sans verifier si bien recu ou pas
-  _radio.send(DESTINATION_RADIO_ID, &paquetSortant, sizeof(paquetSortant), NRFLite::NO_ACK);
-
-  // Remet la radio en mode RX
-  _radio.hasData();
 
   // ATmega328 goes to sleep for about 8 seconds
   Serial.println("Fin: je vais dormir pendant 8 secondes");
