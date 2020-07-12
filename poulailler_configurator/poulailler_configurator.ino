@@ -59,7 +59,7 @@ void setup()
   Serial.begin(115200);
   
   paquetSortant.mode = 1;   // 1 = auto / 2 = fermeture / 3 = ouverture
-  paquetSortant.compteur_nuit_max = 450;
+  paquetSortant.compteur_nuit_max = 451;
   paquetSortant.jour = 51;
   paquetSortant.hyst = 21;
 
