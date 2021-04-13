@@ -9,9 +9,11 @@ SoftwareSerial sim900(7, 8);    // SIM900 Tx/Rx connecte a Arduino 7/8
 const byte detecteur = 2;       // PIN venant du detecteur de passage
 const byte powerSim900 = 9 ;    // Pin pour allumer le SIM900
 const byte ledPin = 13;         // Pin led interne, pour debug
-volatile byte state = 0;        // Variable stockage etat passage
-String numero = "33618671034";  // Numero a qui on envoi les SMS
-String last_message = "";
+volatile byte state = 0;        // Variable stockage etat passage (volatile car utilise dans interrupts)
+byte c_purge = 0;               // Variable compteur avant de purge tous les SMS de la SIM
+String numero = "33671430612";  // Numero a qui on envoi les SMS
+String last_message = "";       // Dernier message recu du SIM900
+
 
 /*
  * Setup
@@ -104,6 +106,21 @@ byte checkpower()
   }
 }
 
+/*
+ * Fonction pour purger les SMS
+ */
+void purge(){
+  // On purge tous les 250 cycles
+  // Un cycle dure entre 2500ms et 4000ms
+  // selon si on envoi un SMS ou pas
+  // Donc on va purger tous les 10/15 minutes
+  c_purge++;
+  if (c_purge > 250) {
+    c_purge = 0;
+    Serial.println("Purging SMS...");
+    sim900.println("AT+CMGDA=\"DEL ALL\"");
+  }
+}
 
 /*
  * Affiche sur le debug serial ce que dit le SIM900
@@ -151,5 +168,11 @@ void loop()
     sendSMS(numero, "Coucou, ya du monde chez nous!");
     state = 0;
   }
-  //delay(500);
+
+  delay(1000);
+
+  // Purge
+  purge();
+
+  delay(1000);
 }
