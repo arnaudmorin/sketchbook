@@ -18,10 +18,11 @@ const int PIN_capteur_bas = 3;
 const int PIN_in1 = 7;
 const int PIN_in2 = 8;
 const int PIN_photo = A0;
-volatile int jour = 50; // il fait jour si superieur a ca
+const int timeout_portes = 45000;
+volatile int jour = 100; // il fait jour si superieur a ca
 volatile int hyst = 20; // avec cet d'hysteresis
 int compteur_nuit = 0 ; // Nombre de fois quil fait nuit, reset a 0 a chaque fois quil fait jour
-volatile int compteur_nuit_max = 450; // Nombre de fois quil doit faire nuit pour fermer la porte, comme l'arduino se met en veille environ 8s avant de refaire une boucle, 450*8s = 3600s = 1H
+volatile int compteur_nuit_max = 0; // Nombre de fois quil doit faire nuit pour fermer la porte, comme l'arduino se met en veille environ 8s avant de refaire une boucle, 450*8s = 3600s = 1H
                            // Le systeme attend done une heure apres la nuit avant de fermer, ca permet a coco de rentrer tranquilement.
 volatile int mode = 1; // 1 = auto, 2 = fermer, 3 = ouvrir
 
@@ -80,7 +81,7 @@ void fermer_porte()
 {
   Serial.println("Action: fermeture porte");
   // Timeout de 45sec pour descendre
-  long timeout = millis() + 45000;
+  long timeout = millis() + timeout_portes;
 
   // Tant qu'on a pas atteind le capteur bas
   while ((millis() < timeout) && (digitalRead(PIN_capteur_bas) == true)) {
@@ -100,7 +101,7 @@ void ouvrir_porte()
 {
   Serial.println("Action: ouverture porte");
   // Timeout de 45sec pour monter
-  long timeout = millis() + 45000;
+  long timeout = millis() + timeout_portes;
 
   // Tant qu'on a pas atteind le capteur haut
   while ((millis() < timeout) && (digitalRead(PIN_capteur_haut) == true)) {
@@ -243,6 +244,7 @@ void loop()
   paquetSortant.mode = mode;
 
   // Envoi du paquetSortant
+  /*
   Serial.println("Action: envoi radio");
   _radio.send(DESTINATION_RADIO_ID, &paquetSortant, sizeof(paquetSortant));//, NRFLite::NO_ACK);
 
@@ -268,6 +270,7 @@ void loop()
     mode = paquetEntrant.mode;
     hyst = paquetEntrant.hyst;
   }
+  */
 
   String msg = "Capteurs: ";
   msg += " photo=";
@@ -329,4 +332,5 @@ void loop()
   Serial.flush();
   wdt_reset();
   goToSleep();
+  //delay(1000);
 }
