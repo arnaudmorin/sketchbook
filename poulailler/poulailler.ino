@@ -7,72 +7,22 @@
  */
 #include <avr/sleep.h>
 #include <avr/wdt.h>
-#include <SPI.h>
-#include <NRFLite.h>
 
 /*
  * Definition des PIN et variables globales
  */
 const int PIN_capteur_haut = 2;
 const int PIN_capteur_bas = 3;
-const int PIN_in1 = 7;
-const int PIN_in2 = 8;
+const int PIN_moteur1 = 7;
+const int PIN_moteur2 = 8;
 const int PIN_photo = A0;
-const int timeout_portes = 45000;
-volatile int jour = 100; // il fait jour si superieur a ca
-volatile int hyst = 20; // avec cet d'hysteresis
+const long timeout_portes = 45000;
+const int jour = 50; // il fait jour si superieur a ca
+const int hyst = 20; // avec cet d'hysteresis
 int compteur_nuit = 0 ; // Nombre de fois quil fait nuit, reset a 0 a chaque fois quil fait jour
-volatile int compteur_nuit_max = 0; // Nombre de fois quil doit faire nuit pour fermer la porte, comme l'arduino se met en veille environ 8s avant de refaire une boucle, 450*8s = 3600s = 1H
+const int compteur_nuit_max = 0; // Nombre de fois quil doit faire nuit pour fermer la porte, comme l'arduino se met en veille environ 8s avant de refaire une boucle, 450*8s = 3600s = 1H
                            // Le systeme attend done une heure apres la nuit avant de fermer, ca permet a coco de rentrer tranquilement.
-volatile int mode = 1; // 1 = auto, 2 = fermer, 3 = ouvrir
-
-/* Params radio avec NRF24L01
-Radio    Arduino
-CE    -> 9
-CSN   -> 10 (Hardware SPI SS)
-MOSI  -> 11 (Hardware SPI MOSI)
-MISO  -> 12 (Hardware SPI MISO)
-SCK   -> 13 (Hardware SPI SCK)
-IRQ   -> No connection
-VCC   -> No more than 3.6 volts
-GND   -> GND
-*/
-const static uint8_t RADIO_ID = 1;             // Our radio's id.
-const static uint8_t DESTINATION_RADIO_ID = 0; // Id of the radio we will transmit to.
-const static uint8_t PIN_RADIO_CE = 9;
-const static uint8_t PIN_RADIO_CSN = 10;
-
-/*
- * Paquet sortant, emis par le poulailler
- * Pourrait aller jusqu'a 32 bytes
- * int = 2 bytes
- */
-struct PaquetSortant
-{
-  int compteur_nuit;
-  int compteur_nuit_max;
-  int capteur_photo;
-  int capteur_haut;
-  int capteur_bas;
-  int jour;
-  int hyst;
-  int mode;
-};
-
-/*
- * Paquet entrant, arrivant au poulailler
- * Utilise pour changer dynamiquement la config
- * 
- */
-struct PaquetEntrant
-{
-  int mode;
-  int jour;
-  int compteur_nuit_max;
-  int hyst;
-};
-
-NRFLite _radio;
+const int mode = 1; // 1 = auto, 2 = fermer, 3 = ouvrir
 
 /*
  * Fonction pour fermer la porte
@@ -86,12 +36,12 @@ void fermer_porte()
   // Tant qu'on a pas atteind le capteur bas
   while ((millis() < timeout) && (digitalRead(PIN_capteur_bas) == true)) {
     // On descend
-    digitalWrite(PIN_in1, HIGH);
-    digitalWrite(PIN_in2, LOW);
+    digitalWrite(PIN_moteur1, HIGH);
+    digitalWrite(PIN_moteur2, LOW);
   }
 
   // On s'arrete
-  digitalWrite(PIN_in1, LOW);
+  digitalWrite(PIN_moteur1, LOW);
 }
 
 /*
@@ -106,12 +56,12 @@ void ouvrir_porte()
   // Tant qu'on a pas atteind le capteur haut
   while ((millis() < timeout) && (digitalRead(PIN_capteur_haut) == true)) {
     // On monte
-    digitalWrite(PIN_in1, LOW);
-    digitalWrite(PIN_in2, HIGH);
+    digitalWrite(PIN_moteur1, LOW);
+    digitalWrite(PIN_moteur2, HIGH);
   }
 
   // On s'arrete
-  digitalWrite(PIN_in2, LOW);
+  digitalWrite(PIN_moteur2, LOW);
 }
 
 /*
@@ -214,9 +164,8 @@ void setup()
   pinMode(PIN_capteur_haut, INPUT_PULLUP);
   pinMode(PIN_capteur_bas, INPUT_PULLUP);
   pinMode(PIN_photo, INPUT);
-  digitalWrite(PIN_in1, LOW);
-  digitalWrite(PIN_in2, LOW);
-  _radio.init(RADIO_ID, PIN_RADIO_CE, PIN_RADIO_CSN);
+  digitalWrite(PIN_moteur1, LOW);
+  digitalWrite(PIN_moteur2, LOW);
 }
 
 /*
@@ -231,46 +180,6 @@ void loop()
   int capteur_bas = digitalRead(PIN_capteur_bas);
 
   Serial.println("");
-
-  // Ecriture du paquetSortant
-  PaquetSortant paquetSortant;
-  paquetSortant.capteur_photo = capteur_photo;
-  paquetSortant.capteur_haut = capteur_haut;
-  paquetSortant.capteur_bas = capteur_bas;
-  paquetSortant.compteur_nuit = compteur_nuit;
-  paquetSortant.compteur_nuit_max = compteur_nuit_max;
-  paquetSortant.jour = jour;
-  paquetSortant.hyst = hyst;
-  paquetSortant.mode = mode;
-
-  // Envoi du paquetSortant
-  /*
-  Serial.println("Action: envoi radio");
-  _radio.send(DESTINATION_RADIO_ID, &paquetSortant, sizeof(paquetSortant));//, NRFLite::NO_ACK);
-
-  // Reception paquetEntrant
-  Serial.println("Action: lecture radio");
-  while (_radio.hasAckData()) {
-    PaquetEntrant paquetEntrant;
-    _radio.readData(&paquetEntrant);
-
-    String msg = "Config received:";
-    msg += " mode=";
-    msg += paquetEntrant.mode;
-    msg += " compteur_nuit_max=";
-    msg += paquetEntrant.compteur_nuit_max;
-    msg += " jour=";
-    msg += paquetEntrant.jour;
-    msg += " hyst=";
-    msg += paquetEntrant.hyst;
-    Serial.println(msg);
-
-    compteur_nuit_max = paquetEntrant.compteur_nuit_max;
-    jour = paquetEntrant.jour;
-    mode = paquetEntrant.mode;
-    hyst = paquetEntrant.hyst;
-  }
-  */
 
   String msg = "Capteurs: ";
   msg += " photo=";
@@ -305,15 +214,19 @@ void loop()
       ouvrir_porte();
     }
     // Sinon on ferme
-    else if (capteur_photo < jour) {
+    else if (capteur_photo <= jour) {
       Serial.println("Info: il fait nuit");
-      if (compteur_nuit > compteur_nuit_max) {
+      if (compteur_nuit >= compteur_nuit_max) {
         fermer_porte();
       }
       else {
         Serial.println("Action: attente");
         compteur_nuit++;
       }
+    }
+    else {
+      Serial.println("Info: il fait entre jour et nuit (hyst)");
+      Serial.println("Action: attente");
     }
   }
   else if (mode == 2){
