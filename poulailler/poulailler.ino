@@ -17,8 +17,8 @@ const int PIN_moteur1 = 7;
 const int PIN_moteur2 = 8;
 const int PIN_photo = A0;
 const long timeout_portes = 45000;
-const int jour = 50; // il fait jour si superieur a ca
-const int hyst = 20; // avec cet d'hysteresis
+const int jour = 2; // il fait jour si superieur a ca
+const int hyst = 1; // avec cet d'hysteresis
 int compteur_nuit = 0 ; // Nombre de fois quil fait nuit, reset a 0 a chaque fois quil fait jour
 const int compteur_nuit_max = 0; // Nombre de fois quil doit faire nuit pour fermer la porte, comme l'arduino se met en veille environ 8s avant de refaire une boucle, 450*8s = 3600s = 1H
                            // Le systeme attend done une heure apres la nuit avant de fermer, ca permet a coco de rentrer tranquilement.

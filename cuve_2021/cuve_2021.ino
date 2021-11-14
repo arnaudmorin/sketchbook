@@ -68,6 +68,7 @@ void loop()
 
   // Wait for data to be ready from sensor
   while (ultraSerial.available() == 0) {
+    Serial.println("Waiting for data");
     delay(100);
   }
 
