@@ -1,40 +1,19 @@
 #include <SoftwareSerial.h>
 
 // Parametres
-float cuve_pleine = 164;  // hauteur en cm quand la cuve est pleine
-float volume_pleine = 4000 ; // volume cuve pleine
-float capteur_pos = 170;    // hauteur en cm du capteur par rapport a 0 (cuve vide)
+float cuve_pleine = 125;  // hauteur en cm quand la cuve est pleine
+float volume_pleine = cuve_pleine * 110 * 258 ; // volume cuve pleine
+float capteur_pos = 151;        // hauteur en cm du capteur
 
-SoftwareSerial ultraSerial(11, 10); // RX(blanc), TX(jaune)
+SoftwareSerial ultraSerial(9, 8); // RX, TX
 SoftwareSerial lcdSerial(3, 2);  // RX(unused), TX - See https://www.sparkfun.com/tutorials/246
 
 void setup()
 {
   Serial.begin(57600);
-  ultraSerial.begin(400);
+  ultraSerial.begin(9600);
   lcdSerial.begin(9600);
   delay(1000);            // wait for display to boot up
-}
-
-/*
-   Fonction calcul volume cuve horizontale
-   h = hauteur du liquide dans la cuve
-   d = diametre de la cuve
-*/
-float volCuve(float h, float d) {
-  //surfaceSecteur = 1/2*r**2*(2*alpha - sin(2*alpha))
-  float r = 0.0;
-  float alpha = 0.0;
-  float volPourc = 0.0;
-  r = d / 2;
-  alpha = acos((r - h) / r);
-  volPourc = ((pow(r, 2) / 2 * (2 * alpha - sin(2 * alpha))) / (3.14159 * pow(r, 2))) * 100.0;
-  //ceinture et bretelles
-  if (volPourc <= 0.0)
-    volPourc = 0.0;
-  else if (volPourc > 100.0)
-    volPourc = 100.0;
-  return volPourc;
 }
 
 /*
@@ -107,8 +86,8 @@ void loop()
   }
 
   // Calculs
-  pourcent = volCuve(capteur_pos - distance/10, cuve_pleine);
-  volume = volume_pleine * pourcent / 100;   // en litre
+  pourcent = (capteur_pos - distance/10) * 100 / cuve_pleine;
+  volume = volume_pleine * (pourcent/100) /1000;   // en litre
   Serial.print("pourcentage=");
   Serial.println(pourcent);
   Serial.print("volume=");
