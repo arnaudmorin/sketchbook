@@ -11,7 +11,7 @@ SoftwareSerial lcdSerial(3, 2);  // RX(unused), TX - See https://www.sparkfun.co
 void setup()
 {
   Serial.begin(57600);
-  ultraSerial.begin(400);
+  ultraSerial.begin(9600);
   lcdSerial.begin(9600);
   delay(1000);            // wait for display to boot up
 }

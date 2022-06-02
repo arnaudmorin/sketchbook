@@ -5,7 +5,7 @@ float cuve_pleine = 125;  // hauteur en cm quand la cuve est pleine
 float volume_pleine = cuve_pleine * 110 * 258 ; // volume cuve pleine
 float capteur_pos = 151;        // hauteur en cm du capteur
 
-SoftwareSerial ultraSerial(9, 8); // RX, TX
+SoftwareSerial ultraSerial(11, 10); // RX, TX(unused)
 SoftwareSerial lcdSerial(3, 2);  // RX(unused), TX - See https://www.sparkfun.com/tutorials/246
 
 void setup()
