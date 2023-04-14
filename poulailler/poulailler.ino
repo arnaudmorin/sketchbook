@@ -16,59 +16,53 @@ const int PIN_capteur_bas = 3;
 const int PIN_moteur1 = 7;
 const int PIN_moteur2 = 8;
 const int PIN_photo = A0;
-const long timeout_portes = 45000;
+const long timeout_portes = 30000; // Temps max pour monter ou descendre
+long timeout = 0; // Variable pour compter le temps qui passe a descendre
+int state = 0;  // state machine
+                // 0: inconnu
+                // 1: haut
+                // 2: en cours de descente
+                // 3: bas
+                // 4: en cours de montee
 const int jour = 2; // il fait jour si superieur a ca
 const int hyst = 1; // avec cet d'hysteresis
-int compteur_nuit = 0 ; // Nombre de fois quil fait nuit, reset a 0 a chaque fois quil fait jour
-const int compteur_nuit_max = 0; // Nombre de fois quil doit faire nuit pour fermer la porte, comme l'arduino se met en veille environ 8s avant de refaire une boucle, 450*8s = 3600s = 1H
-                           // Le systeme attend done une heure apres la nuit avant de fermer, ca permet a coco de rentrer tranquilement.
-const int mode = 1; // 1 = auto, 2 = fermer, 3 = ouvrir
+
+void start_timeout(){
+  // Init timeout
+  timeout = millis() + timeout_portes;
+}
 
 /*
  * Fonction pour fermer la porte
  */
-void fermer_porte()
-{
+void fermer_porte(){
   Serial.println("Action: fermeture porte");
-  // Timeout de 45sec pour descendre
-  long timeout = millis() + timeout_portes;
-
-  // Tant qu'on a pas atteind le capteur bas
-  while ((millis() < timeout) && (digitalRead(PIN_capteur_bas) == true)) {
-    // On descend
-    digitalWrite(PIN_moteur1, HIGH);
-    digitalWrite(PIN_moteur2, LOW);
-  }
-
-  // On s'arrete
-  digitalWrite(PIN_moteur1, LOW);
+  digitalWrite(PIN_moteur1, HIGH);
+  digitalWrite(PIN_moteur2, LOW);
 }
 
 /*
  * Fonction pour ouvrir la porte
  */
-void ouvrir_porte()
-{
+void ouvrir_porte(){
   Serial.println("Action: ouverture porte");
-  // Timeout de 45sec pour monter
-  long timeout = millis() + timeout_portes;
+  digitalWrite(PIN_moteur1, LOW);
+  digitalWrite(PIN_moteur2, HIGH);
+}
 
-  // Tant qu'on a pas atteind le capteur haut
-  while ((millis() < timeout) && (digitalRead(PIN_capteur_haut) == true)) {
-    // On monte
-    digitalWrite(PIN_moteur1, LOW);
-    digitalWrite(PIN_moteur2, HIGH);
-  }
-
-  // On s'arrete
-  digitalWrite(PIN_moteur2, LOW);
+/*
+ * Fonction pour stopper la porte
+ */
+void stop_porte(){
+  Serial.println("Action: stop porte");
+  digitalWrite(PIN_moteur1, LOW);
+  digitalWrite(PIN_moteur2, LOW);  
 }
 
 /*
  * Fonction pour entrer en sleep mode
  */
-void goToSleep()   
-{
+void goToSleep(){
   // The ATmega328 has five different sleep states.
   // See the ATmega 328 datasheet for more information.
   // SLEEP_MODE_IDLE -the least power savings 
@@ -93,7 +87,7 @@ void goToSleep()
 /*
  * Fonction pour activer le watchdog
  */
-void watchdogOn() {
+void watchdogOn(){
   /* 
    WDTCSR (Watch Dog Timer register) contains a byte (8 bits)
       7 WDIF -- Interrupt Flag / automatically flagged high and low by the system.
@@ -146,22 +140,21 @@ void watchdogOn() {
 /*
  * Function called when waking up from watchdog
  */
-ISR(WDT_vect) {
+ISR(WDT_vect){
   // Do nothing
 }
 
 /*
  * Setup
  */
-void setup()
-{
+void setup(){
   Serial.begin(115200);
   
   // Turn on watchdog
   watchdogOn();
 
   // Initialise
-  pinMode(PIN_capteur_haut, INPUT_PULLUP);
+  pinMode(PIN_capteur_haut, INPUT_PULLUP); // 1 == capteur ouvert / 0 = capteur ferme
   pinMode(PIN_capteur_bas, INPUT_PULLUP);
   pinMode(PIN_photo, INPUT);
   digitalWrite(PIN_moteur1, LOW);
@@ -171,79 +164,79 @@ void setup()
 /*
  * Loop
  */
-void loop()
-{
-  // Lecture valeur luminosite (entre 0 et 1023)
-  int capteur_photo = analogRead(PIN_photo);
-  // Lecture capteur haut et bas
-  int capteur_haut = digitalRead(PIN_capteur_haut);
-  int capteur_bas = digitalRead(PIN_capteur_bas);
+void loop(){
 
   Serial.println("");
 
   String msg = "Capteurs: ";
   msg += " photo=";
-  msg += capteur_photo;
+  msg += analogRead(PIN_photo);
   msg += " haut=";
-  msg += capteur_haut;
+  msg += digitalRead(PIN_capteur_haut);
   msg += " bas=";
-  msg += capteur_bas;
+  msg += digitalRead(PIN_capteur_bas);
   Serial.println(msg);
 
-  msg = "Config: ";
-  msg += " jour=";
-  msg += jour;
-  msg += " hyst=";
-  msg += hyst;
-  msg += " compteur_nuit_max=";
-  msg += compteur_nuit_max;
-  Serial.println(msg);
-
-  msg = "Compteurs: ";
-  msg += " compteur_nuit=";
-  msg += compteur_nuit;
-  Serial.println(msg);
-
-  if (mode == 1) {
-    // Mode auto
-    Serial.println("Mode: auto");
-    // Si il fait jour, on ouvre la porte
-    if (capteur_photo > jour + hyst) {
-      Serial.println("Info: il fait jour");
-      compteur_nuit = 0;
+  // State machine
+  switch( state ) {
+    case 0:
+      Serial.println("State=inconnu");
+      // Etat inconnu, on monte
       ouvrir_porte();
-    }
-    // Sinon on ferme
-    else if (capteur_photo <= jour) {
-      Serial.println("Info: il fait nuit");
-      if (compteur_nuit >= compteur_nuit_max) {
+      // Si on atteind le capteur haut
+      if (digitalRead(PIN_capteur_haut) == 0){
+        stop_porte();
+        state = 1;
+      }
+      break;
+    case 1:
+      Serial.println("State=en haut");
+      // on est en haut
+      // Si il fait nuit, on descend
+      if (analogRead(PIN_photo) <= jour) {
         fermer_porte();
+        start_timeout();
+        state = 2;
       }
-      else {
-        Serial.println("Action: attente");
-        compteur_nuit++;
+      break;
+    case 2:
+      Serial.println("State=en cours de descente");
+      // on est en cours de descente
+      // on attend la fin du timeout pour stopper la porte
+      if (millis() > timeout) {
+        stop_porte();
+        state = 3;
       }
-    }
-    else {
-      Serial.println("Info: il fait entre jour et nuit (hyst)");
-      Serial.println("Action: attente");
-    }
-  }
-  else if (mode == 2){
-    // Fermer
-    Serial.println("Mode: fermeture");
-    fermer_porte();
-  }
-  else if (mode == 3){
-    // Ouvrir
-    Serial.println("Mode: ouverture");
-    ouvrir_porte();
+      break;
+    case 3:
+      Serial.println("State=en bas");
+      // on est en bas
+      // Si il fait jour, on monte
+      if (analogRead(PIN_photo) > jour + hyst) {
+        ouvrir_porte();
+        state = 4;
+      }
+      break;
+    case 4:
+      Serial.println("State=en cours de montee");
+      // on est en cours de montee
+      // Si on atteind le capteur haut
+      if (digitalRead(PIN_capteur_haut) == 0){
+        stop_porte();
+        state = 1;
+      }
+      break;
   }
 
-  // ATmega328 goes to sleep for about 8 seconds
-  Serial.println("Fin: je vais dormir pendant 8 secondes");
-  Serial.flush();
-  wdt_reset();
-  goToSleep();
-  //delay(1000);
+  // Si on est dans un etat stable, on peut dormir
+  if ((state == 1) or (state == 3)) {
+    // ATmega328 goes to sleep for about 8 seconds
+    Serial.println("Fin: je vais dormir pendant 8 secondes");
+    Serial.flush();
+    wdt_reset();
+    goToSleep();
+  }
+
+  // Evitons de tourner trop vite
+  delay(1000);
 }
